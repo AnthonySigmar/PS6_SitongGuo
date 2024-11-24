@@ -6,6 +6,7 @@ format:
   pdf:
     include-in-header: 
        text: |
+         \usepackage{graphicx}
          \usepackage{fvextra}
          \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
 include-before-body:
@@ -442,20 +443,20 @@ combined_plot
 
 5. 
 a. 
-```{python}
+
 ![2-5-1](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/2_5_1.png)
-```
+
 There are 16 combinations in the menu.
 
 b. 
-```{python}
+
 ![2-5-2](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/2_5_2.png)
-```
+
 
 c. 
-```{python}
+
 ![2-5-3](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/2_5_3.png)
-```
+
 ```{python}
 filtered_df1 = (
     aggregated_df[
@@ -497,9 +498,9 @@ From the plot, the most common area (latitude, longitude) is (41.96, -87.75) .
 
 d. 
 Question: which approximate area is more likely for minor traffic accidents to occur?  
-```{python}
+
 ![2-5-4](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/2_5_4.png)
-```
+
 The area is the southeast area of Chicago, judging from the geographical distribution.
 
 e. 
@@ -617,22 +618,20 @@ final_plot
 
 2.
 a. 
-```{python}
 ![3-2-1](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_1.png)
-```
+
 
 b. 
-```{python}
+
 ![3-2-2: '8:00'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_1.png)
 ![3-2-2: '12:00'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_21.png)
 ![3-2-2: '18:00'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_22.png)
-```
+
 
 c. 
-```{python}
 ![3-2-3: 'morning'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_31.png)
 ![3-2-3: 'evening'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_32.png)
-```
+
 
 From the plots showing 6am and 8 pm, we can say that is the night hours seeing more constructions on road.
 

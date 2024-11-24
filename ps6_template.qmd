@@ -1,6 +1,6 @@
 ---
 title: "Problem Set 6 - Waze Shiny Dashboard"
-author: "Peter Ganong, Maggie Shi, and Andre Oviedo"
+author: "Sitong Guo"
 date: today
 format: 
   pdf:
@@ -69,7 +69,7 @@ print_file_contents("./top_alerts_map_byhour/app.py") # Change accordingly
 # Import required packages.
 import pandas as pd
 import altair as alt 
-import pandas as pd
+
 from datetime import date
 import numpy as np
 alt.data_transformers.disable_max_rows() 
@@ -84,168 +84,634 @@ import json
 1. 
 
 ```{python}
+import zipfile
+```
+```{python}
+zip_path = 'C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/student30538/problem_sets/ps6/waze_data.zip'
+with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+    zip_ref.extractall('C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/student30538/problem_sets/ps6/waze_data')
 
+sample_data_path = 'C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/student30538/problem_sets/ps6/waze_data/waze_data_sample.csv'
+waze_sample_df = pd.read_csv(sample_data_path)
+
+columns_to_exclude = ['ts', 'geo', 'geoWKT']
+altair_data_types = [(col, 
+                      'Quantitative' if pd.api.types.is_numeric_dtype(waze_sample_df[col]) else 'Nominal') 
+                     for col in waze_sample_df.columns if col not in columns_to_exclude]
+print("Variable Names and Data Types:")
+print(altair_data_types)
 ```
 
 2. 
 
 ```{python}
+full_data_path = 'C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/student30538/problem_sets/ps6/waze_data/waze_data.csv'
+waze_full_df = pd.read_csv(full_data_path)
 
+missing_data_summary = waze_full_df.isnull().sum().reset_index()
+missing_data_summary.columns = ['Variable', 'Missing_Count']
+missing_data_summary['Non_Missing_Count'] = len(waze_full_df) - missing_data_summary['Missing_Count']
+
+stacked_data = pd.melt(missing_data_summary, id_vars=['Variable'], 
+                       value_vars=['Missing_Count', 'Non_Missing_Count'], 
+                       var_name='Category', value_name='Count')
+
+chart = alt.Chart(stacked_data).mark_bar().encode(
+    x='Variable:N',
+    y='Count:Q',
+    color='Category:N'
+).properties(title='Missing Values in Variables')
+chart.show()
 ```
+
+Variables with missing values are: nThumbsUp, street, subtype.
+Among which the most incomplete variable is nThumbsUp.
 
 3. 
-
+a,
 ```{python}
+unique_types = waze_full_df['type'].unique()
+unique_subtypes = waze_full_df.groupby('type')['subtype'].unique()
+print(f"Unique types: {unique_types}")
+print(f"Unique subtypes: {unique_subtypes}")
 
+# Identify types with NA subtype, check if there are sub-subs
+na_subtypes = unique_subtypes.apply(lambda x: x[pd.isnull(x)])
+na_subtypes_count = unique_subtypes.apply(lambda x: pd.isnull(x).any()).sum()
+print(f"Number of types that have nan subtype:{na_subtypes_count}" )
 ```
+I can identify the types with sub-subs: HAZARD
+
+b,
+```{python}
+# Bulleted listed with the values at each layer given this hierarchy.  Readable
+hierarchy = {}
+for t, subtypes in unique_subtypes.items():
+    readable_type = t.replace("_", " ").title()
+    readable_subtypes = [
+        st.replace("_", " ").title().replace(readable_type, "").strip() if pd.notnull(st) else "Unclassified"
+        for st in subtypes
+    ]
+    hierarchy[readable_type] = readable_subtypes
+```
+```{python}
+sub_subtype_hierarchy = {
+    "Hazard": {
+        "Unclassified":[],
+        "On Road": ["Unclassified", "Car Stopped", "Construction", "Emergency Vehicle", "Ice", "Object", "Pot Hole", "Traffic Light Fault", "Lane Closed","Road Kill"],
+        "On Shoulder": ["Unclassified", "Car stopped","Animals", "Missing Sign"],
+        "Weather": ["Unclassified", "Flood","Fog","Heavy Snow","Hail"]
+    },
+    "Accident": {
+        "Unclassified":[],
+        "Major": [],
+        "Minor": [],
+    },
+    "Jam": {
+        "Unclassified":[],
+        "Heavy Traffic": [],
+        "Moderate Traffic": [],
+        "Stand Still Traffic": [],
+        "Light Traffic": []
+    },
+    "Road Closed":{
+        "Unclassified":[],
+        "Event": [],
+        "Construction": [],
+        "Hazard": []
+    }
+}
+
+print("Full Hierarchy with Sub-Subtypes:")
+for t, subtypes in sub_subtype_hierarchy.items():
+    print(f"- {t}")
+    for subtype, sub_subtypes in subtypes.items():
+        print(f"  - {subtype}")
+        for sub_subtype in sub_subtypes:
+            print(f"    - {sub_subtype}")
+```
+
+c,
+```{python}
+#Keep NA subtypes
+```
+Yes we should since that they do contain the information of those issues that are not readily classified yet. 
 
 4. 
-
-1. 
+a, b:
 ```{python}
+# Define the primary subtypes manually
+primary_subtypes = {
+    "Hazard": ["On Road", "On Shoulder", "Weather", "Unclassified"],
+    "Accident": ["Major", "Minor", "Unclassified"],
+    "Jam": ["Light Traffic", "Moderate Traffic", "Heavy Traffic", "Stand Still Traffic", "Unclassified"],
+    "Road Closed": ["Event", "Construction", "Hazard", "Unclassified"]
+}
+
+def clean_type_and_subtypes(row):
+    # Clean the type 
+    readable_type = row['type'].replace("_", " ").title()
+
+    # Clean the subtype 
+    if pd.notnull(row['subtype']):
+        readable_subtype = row['subtype'].replace("_", " ").title().replace(readable_type, "").strip()  # Clean the subtype
+    else:
+        readable_subtype = "Unclassified"
+
+    # Initialize subsubtype as None
+    readable_subsubtype = None
+
+    # Check if the cleaned subtype is a sub
+    if readable_subtype in primary_subtypes.get(readable_type, []):
+        readable_subsubtype = "Unclassified"
+    else:
+        readable_subsubtype = readable_subtype
+
+        # For those under hazard, assign the proper Subtype in the dict!
+        for primary in primary_subtypes.get(readable_type, []):
+            if primary in readable_subtype:
+                readable_subtype = primary
+                # Drop the subtype string in the subsub
+                readable_subsubtype = readable_subsubtype.replace(primary, "").strip()
+                break
+
+    return pd.Series([readable_type, readable_subtype, readable_subsubtype])
+
+crosswalk_df = waze_full_df[['type', 'subtype']].drop_duplicates()
+crosswalk_df[['updated_type', 'updated_subtype', 'updated_subsubtype']] = crosswalk_df.apply(clean_type_and_subtypes, axis=1)
+
+crosswalk_df
+```
+
+c,
+```{python}
+merged_data = pd.merge(waze_full_df, crosswalk_df, on=['type', 'subtype'], how='left')
+
+# Count rows for accident unclassified
+accident_unclassified_count = merged_data[
+    (merged_data['updated_type'] == 'Accident') & 
+    (merged_data['updated_subtype'] == 'Unclassified')
+].shape[0]
+
+print(f"Number of Accident-Unclassified: {accident_unclassified_count}")
 
 ```
 
-2. 
-
+d,
 ```{python}
+# Extract unique combinations of type-subtype from both data
+crosswalk_combinations = crosswalk_df[['type', 'subtype']].drop_duplicates()
+merged_combinations = merged_data[['type', 'subtype']].drop_duplicates()
 
+# Compare unique combination
+are_combinations_equal = crosswalk_combinations.equals(merged_combinations)
+
+print(f"Do they have same values in type-subtype? '{are_combinations_equal}'")
 ```
-
-3. 
-
-```{python}
-
-```
-
-4. 
-
-```{python}
-
-```
-
 
 # App #1: Top Location by Alert Type Dashboard (30 points){-}
 
 1. 
-
 a. 
-```{python}
+Prompt to ChatGPT:
+Write a regex pattern to extract latitude and longitude from a string formatted like this: "POINT (longitude latitude)".
 
+Response:
+The regex pattern is:
+
+python:
+r"POINT \((-?\d+\.\d+) (-?\d+\.\d+)\)"
+Explanation:
+POINT matches the literal string.
+\( and \) escape parentheses.
+-? matches an optional negative sign.
+\d+ matches one or more digits.
+\. matches a literal dot.
+Captures the first number as longitude and the second as latitude.
+```{python}
+import re
+```
+```{python}
+# Delete that space after POINT, no spaces between point and (
+# Extract latitude and longitude
+merged_data['latitude'] = merged_data['geo'].str.extract(r"POINT\((-?\d+\.\d+) (-?\d+\.\d+)\)", expand=True)[1].astype(float)
+merged_data['longitude'] = merged_data['geo'].str.extract(r"POINT\((-?\d+\.\d+) (-?\d+\.\d+)\)", expand=True)[0].astype(float) 
+merged_data['longitude']
 ```
 
 b. 
 ```{python}
+# Create bins with step size 0.01
+merged_data['latitude'] = (merged_data['latitude'] // 0.01 * 0.01).round(2)
+merged_data['longitude'] = (merged_data['longitude'] // 0.01 * 0.01).round(2)
+
+# most frequent bin combination
+most_frequent_bin = merged_data.groupby(['latitude', 'longitude']).size().idxmax()
+print(f"The most frequent bin is: {most_frequent_bin}")
 
 ```
-
 
 c. 
 ```{python}
+# Aggregate data
+aggregated_df = (
+    merged_data.groupby(['latitude', 'longitude', 'updated_type', 'updated_subtype'])
+    .size()
+    .reset_index(name='alert count')
+)
+
+output_path = "C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/top_alerts_map.csv"
+aggregated_df.to_csv(output_path, index=False)
+
+# Check aggregation level and rows
+print(f"Aggregation level: latitude, longitude, type, subtype. \nNumber of rows in the DataFrame: {aggregated_df.shape[0]}")
 
 ```
 
-d. 
+2. 
 ```{python}
 
+# Filter for Jam Heavy Traffic
+filtered_df = (
+    aggregated_df[
+        (aggregated_df['updated_type'] == 'Jam') &
+        (aggregated_df['updated_subtype'] == 'Heavy Traffic')
+    ]
+    .nlargest(10, 'alert count')
+)
+
+# Define axis ranges for better presentation!
+latitude_min, latitude_max = filtered_df['latitude'].min() - 0.01, filtered_df['latitude'].max() + 0.01
+longitude_min, longitude_max = filtered_df['longitude'].min() - 0.01, filtered_df['longitude'].max() + 0.01
+
+chart = alt.Chart(filtered_df).mark_circle().encode(
+    x=alt.X('longitude:Q', title='Longitude', scale=alt.Scale(domain=[longitude_min, longitude_max])),
+    y=alt.Y('latitude:Q', title='Latitude', scale=alt.Scale(domain=[latitude_min, latitude_max])),
+    size=alt.Size('alert count:Q', title='Alert Count', scale=alt.Scale(range=[50, 1000])),
+    color=alt.Color('alert count:Q', scale=alt.Scale(scheme='reds')),
+    tooltip=['latitude:Q', 'longitude:Q', 'alert count:Q']
+).properties(
+    title='Top 10 Locales for Jam - Heavy Traffic Alerts',
+    width=800,
+    height=600
+)
+chart.show()
 ```
 
 3. 
-    
 a. 
-
 ```{python}
+import requests
+# Download using python
+url = "https://data.cityofchicago.org/api/geospatial/bbvz-uum9?method=export&format=GeoJSON"
+file_path = "C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/chicago-boundaries.geojson"
 
+response = requests.get(url)
+if response.status_code == 200:
+    with open(file_path, "wb") as f:
+        f.write(response.content)
+    print("successful!")
+else:
+    print(f"Failed:{response.status_code}")
 ```
-    
+
 
 b. 
 ```{python}
+import json
 # MODIFY ACCORDINGLY
-file_path = "./top_alerts_map/chicago-boundaries.geojson"
-#----
 
 with open(file_path) as f:
     chicago_geojson = json.load(f)
 
 geo_data = alt.Data(values=chicago_geojson["features"])
-
 ```
 
 4. 
 
 ```{python}
+# Create map layer
+map_layer = alt.Chart(geo_data).mark_geoshape(
+    fill="lightgray",  
+    stroke="white",    
+    strokeWidth=0.5   
+).properties(
+    width=800,  
+    height=600  
+).project(
+    type="equirectangular"  # Projection type
+)
+```
 
+```{python}
+# scatter plot layer
+scatter_layer = alt.Chart(filtered_df).mark_circle().encode(
+    
+    longitude='longitude:Q',
+    latitude='latitude:Q',
+    size=alt.Size('alert count:Q', scale=alt.Scale(range=[50, 500])),  
+    color=alt.Color('alert count:Q', scale=alt.Scale(scheme='reds')),  
+    tooltip=['latitude', 'longitude', 'alert count']  
+).properties(
+    title="Top 10 Jam - Heavy Traffic Alerts in Chicago"
+)
+```
+
+```{python}
+# Set axis domains for alignment
+lat_min, lat_max = filtered_df['latitude'].min() - 0.01, filtered_df['latitude'].max() + 0.01
+lon_min, lon_max = filtered_df['longitude'].min() - 0.01, filtered_df['longitude'].max() + 0.01
+
+# Combine the layers!!
+combined_plot = (map_layer + scatter_layer).configure_view(
+    stroke=None   
+    # Remove the default borders around the map
+).properties(
+    width=800,
+    height=600
+).configure_title(
+    fontSize=16,
+    anchor="start"
+).encode(
+    x=alt.X('longitude:Q', scale=alt.Scale(domain=[lon_min, lon_max]), title="Longitude"),
+    y=alt.Y('latitude:Q', scale=alt.Scale(domain=[lat_min, lat_max]), title="Latitude")
+)
+
+combined_plot
 ```
 
 5. 
-
 a. 
-
 ```{python}
-
+![2-5-1](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/2_5_1.png)
 ```
+There are 16 combinations in the menu.
 
 b. 
 ```{python}
-
+![2-5-2](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/2_5_2.png)
 ```
 
 c. 
 ```{python}
-
+![2-5-3](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/2_5_3.png)
 ```
+```{python}
+filtered_df1 = (
+    aggregated_df[
+        (aggregated_df['updated_type'] == 'Road Closed') &
+        (aggregated_df['updated_subtype'] == 'Event')
+    ]
+    .nlargest(10, 'alert count')
+)
+
+scatter_layer = alt.Chart(filtered_df1).mark_circle().encode(
+    longitude='longitude:Q',
+    latitude='latitude:Q',
+    size=alt.Size('alert count:Q', scale=alt.Scale(range=[50, 500])),  
+    color=alt.Color('alert count:Q', scale=alt.Scale(scheme='reds')),  
+    tooltip=['latitude', 'longitude', 'alert count']  
+).properties(
+    title="Top 10 Road Closure - Event Alerts in Chicago"
+)
+
+lat_min, lat_max = filtered_df1['latitude'].min() - 0.01, filtered_df1['latitude'].max() + 0.01
+lon_min, lon_max = filtered_df1['longitude'].min() - 0.01, filtered_df1['longitude'].max() + 0.01
+combined_plot1 = (map_layer + scatter_layer).configure_view(
+    stroke=None   
+    # Remove the default borders around the map
+).properties(
+    width=800,
+    height=600
+).configure_title(
+    fontSize=16,
+    anchor="start"
+).encode(
+    x=alt.X('longitude:Q', scale=alt.Scale(domain=[lon_min, lon_max]), title="Longitude"),
+    y=alt.Y('latitude:Q', scale=alt.Scale(domain=[lat_min, lat_max]), title="Latitude")
+)
+combined_plot1
+```
+
+From the plot, the most common area (latitude, longitude) is (41.96, -87.75) .
 
 d. 
+Question: which approximate area is more likely for minor traffic accidents to occur?  
 ```{python}
-
+![2-5-4](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/2_5_4.png)
 ```
+The area is the southeast area of Chicago, judging from the geographical distribution.
 
 e. 
+Add the subsubtype column to provide more granular analysis on the hazard subtypes. Or, add the roadtype or the ts columns to examine insights on relationship between alerts and road types or the timing.
+
+The code in App1:
+```{python}
+def print_file_contents(file_path):
+    """Print contents of a file."""
+    try:
+        with open(file_path, 'r') as f:
+            content = f.read()
+            print("```python")
+            print(content)
+            print("```")
+    except FileNotFoundError:
+        print("```python")
+        print(f"Error: File '{file_path}' not found")
+        print("```")
+    except Exception as e:
+        print("```python") 
+        print(f"Error reading file: {e}")
+        print("```")
+
+print_file_contents("C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map/app1/app1.py") # Change accordingly
+```
 
 # App #2: Top Location by Alert Type and Hour Dashboard (20 points) {-}
 
 1. 
-
 a. 
-
-
+No. The ts column contains highly specified granular data (to minute and second). Collapsing by ts would create numerous unique rows for every specific timestamp as each moment is unique. This would not aggregate data meaningfully and will even increase computational complexity.
     
 b. 
 ```{python}
+hour_data = merged_data
+hour_data['ts'] = pd.to_datetime(hour_data['ts'])
 
+hour_data['hour'] = hour_data['ts'].dt.strftime('%H:00')
+```
+```{python}
+# Collapse 
+collapsed_data = (
+    hour_data.groupby(['hour', 'updated_type', 'updated_subtype', 'longitude', 'latitude'])
+    .size()
+    .reset_index(name='alert_count')  
+)
+```
+```{python}
+# top 10 locations
+top_10_data = (
+    collapsed_data
+    .sort_values(['hour', 'updated_type', 'updated_subtype', 'alert_count'], ascending=[True, True, True, False])
+    .groupby(['hour', 'updated_type', 'updated_subtype'])
+    .head(10)  
+)
+
+top_10_data.to_csv("C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/top_alerts_map_byhour.csv", index=False)
+
+print(f"Number of rows in the collapsed dataset: {len(top_10_data)}")
 ```
 
 c.
-
 ```{python}
+heavy_traffic_data = top_10_data[
+    (top_10_data['updated_type'] == 'Jam') &
+    (top_10_data['updated_subtype'] == 'Heavy Traffic')
+]
 
+# Select three times of day
+times = ['08:00', '12:00', '18:00']  
+
+# Create a plot for each time
+plots = []
+for time in times:
+    # specific hour
+    data_for_time = heavy_traffic_data[heavy_traffic_data['hour'] == time]
+
+    # scatter plot for top 10 locations
+    scatter_layer = alt.Chart(data_for_time).mark_circle().encode(
+        longitude='longitude:Q',
+        latitude='latitude:Q',
+        size=alt.Size('alert_count:Q', scale=alt.Scale(range=[50, 500])),  
+        color=alt.Color('alert_count:Q', scale=alt.Scale(scheme='reds')),  
+        tooltip=['latitude', 'longitude', 'alert_count']  
+    ).properties(
+        title = f"Top 10 Jam - Heavy Traffic Alerts by {time} in Chicago"
+    )
+
+    map_layer = map_layer
+
+    # Set axis domains for alignment
+    lat_min, lat_max = data_for_time['latitude'].min() - 0.01, data_for_time['latitude'].max() + 0.01
+    lon_min, lon_max = data_for_time['longitude'].min() - 0.01, data_for_time['longitude'].max() + 0.01
+
+    # Combine the layers!!
+    plot = (map_layer + scatter_layer).encode(
+        x=alt.X('longitude:Q', scale=alt.Scale(domain=[lon_min, lon_max]), title="Longitude"),
+        y=alt.Y('latitude:Q', scale=alt.Scale(domain=[lat_min, lat_max]), title="Latitude")
+    ).properties(
+        width=800,
+        height=600
+    )
+    plots.append(plot)
+
+# Concatenate the plots vertically
+final_plot = alt.vconcat(*plots).configure_view(
+    stroke=None
+).configure_title(
+    fontSize=16,
+    anchor="start"
+)
+final_plot
 ```
-    
 
 2.
-
 a. 
-
-
+```{python}
+![3-2-1](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_1.png)
+```
 
 b. 
-
+```{python}
+![3-2-2: '8:00'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_1.png)
+![3-2-2: '12:00'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_21.png)
+![3-2-2: '18:00'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_22.png)
+```
 
 c. 
+```{python}
+![3-2-3: 'morning'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_31.png)
+![3-2-3: 'evening'](C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/3_2_32.png)
+```
 
+From the plots showing 6am and 8 pm, we can say that is the night hours seeing more constructions on road.
+
+The code for app2:
+```{python}
+def print_file_contents(file_path):
+    """Print contents of a file."""
+    try:
+        with open(file_path, 'r') as f:
+            content = f.read()
+            print("```python")
+            print(content)
+            print("```")
+    except FileNotFoundError:
+        print("```python")
+        print(f"Error: File '{file_path}' not found")
+        print("```")
+    except Exception as e:
+        print("```python") 
+        print(f"Error reading file: {e}")
+        print("```")
+
+print_file_contents("C:/Users/RedthinkerDantler/Documents/GitHub/DPPP2/PS6_SitongGuo/top_alerts_map_byhour/app2/app2.py") # Change accordingly
+```
 
 # App #3: Top Location by Alert Type and Hour Dashboard (20 points){-}
 
 1. 
-
-
 a. 
+Yes, this way improves efficiency in processing data, also maintain certain granularity in time window analyses. Dividing a day into major components characterize the pattern of traffic situations while avoid going into overly details and confusing the user. 
 
 b. 
-
 ```{python}
+ranged_data = collapsed_data
+ranged_data['hour'] = pd.to_datetime(ranged_data['hour'], format='%H:%M')
 
+sixnine_data = ranged_data[ranged_data['hour'].dt.hour.between(6, 9)]
+```
+```{python}
+sixnine_data = sixnine_data[
+    (sixnine_data["updated_type"] == "Jam") &
+    (sixnine_data["updated_subtype"] == "Heavy Traffic") 
+]
+
+sixnine_data = sixnine_data.groupby(['latitude', 'longitude'], as_index=False)['alert_count'].sum()
+
+top_10_location3 = sixnine_data.nlargest(10, 'alert_count')
+```
+```{python}
+scatter_plot3 = alt.Chart(top_10_location3).mark_circle().encode(
+    longitude='longitude:Q',
+    latitude='latitude:Q',
+    size=alt.Size('alert_count:Q', scale=alt.Scale(range=[50, 500])),
+    color=alt.Color('alert_count:Q', scale=alt.Scale(scheme='reds')),
+    tooltip=['latitude', 'longitude', 'alert_count']
+).properties(
+    width=800,
+    height=600,
+    title="Top 10 Jam - Heavy Traffic Alerts Between 6 AM and 9 AM"
+)
+
+# Set axis domains for alignment
+lat_min, lat_max = top_10_location3['latitude'].min() - 0.01, top_10_location3['latitude'].max() + 0.01
+lon_min, lon_max = top_10_location3['longitude'].min() - 0.01, top_10_location3['longitude'].max() + 0.01
+
+# Combine the layers!!
+rangeplot = (map_layer + scatter_plot3).configure_view(
+    stroke=None
+).configure_title(
+    fontSize=16,
+    anchor="start"
+).encode(
+    x=alt.X('longitude:Q', scale=alt.Scale(domain=[lon_min, lon_max]), title="Longitude"),
+    y=alt.Y('latitude:Q', scale=alt.Scale(domain=[lat_min, lat_max]), title="Latitude")
+).properties(
+    width=800,
+    height=600
+)
+rangeplot.show()
 ```
 
 2. 
@@ -267,3 +733,6 @@ c.
 
 
 d.
+1, Add a "Time Period" Categorization (Morning vs Afternoon). Categorize data based on the time of day and color the points. This is by extracting the hour and classifying them into morning and afternoon: Morning 6AM - 12PM, Afternoon: 1PM - 6PM. A column to tell that for each case.
+2, Add a Legend for Size and Time Period.
+3, Use alt.shape() to assign different marks for the two categories.

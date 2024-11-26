@@ -66,7 +66,6 @@ print_file_contents("./top_alerts_map_byhour/app.py") # Change accordingly
 
 ```{python} 
 #| echo: false
-
 # Import required packages.
 import pandas as pd
 import altair as alt 
@@ -74,8 +73,9 @@ import altair as alt
 from datetime import date
 import numpy as np
 alt.data_transformers.disable_max_rows() 
-
 import json
+
+alt.renderers.enable("png")
 ```
 
 # Background {-}
@@ -122,7 +122,7 @@ chart = alt.Chart(stacked_data).mark_bar().encode(
     y='Count:Q',
     color='Category:N'
 ).properties(title='Missing Values in Variables')
-chart.show()
+chart
 ```
 
 Variables with missing values are: nThumbsUp, street, subtype.
@@ -356,7 +356,7 @@ chart = alt.Chart(filtered_df).mark_circle().encode(
     width=800,
     height=600
 )
-chart.show()
+chart
 ```
 
 3. 
